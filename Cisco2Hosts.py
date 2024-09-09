@@ -124,10 +124,12 @@ def convert_to_host_file(dhcp_config, existing_content, dnsdomain):
 
     return unix_hosts
 
+# Writes a file to a specified directory
 def write_to_file(file_path, content):
     with open(file_path, 'w', newline=os.linesep) as file:
         file.write(content)
 
+# Runs Unix commands
 def execute_unix_commands(chown_cmd, chgrp_cmd, restart_cmd):
     try:
         subprocess.run(chown_cmd, check=True, shell=True)
@@ -150,16 +152,28 @@ def send_command(shell, command):
     return output
 
 # Configure Fortinet DNS settings
-def configure_fortinet_dns(shell, dbname, dnsdomain, ttl, dns_entries):
+def configure_fortinet_dns(shell, fortinet_config, dnsdomain, dns_entries):
     logging.info("Starting Fortinet DNS configuration")
+
+    # Extract Fortinet-specific values from the configuration
+    dbname = fortinet_config['base_name']
+    ttl = fortinet_config['ttl']
+    primary_name = fortinet_config.get('primary_dns', 'clark.ns.cloudflare.com')  # Default value if not in config
+    contact = fortinet_config.get('contact', 'hostmaster@webserver.com')  # Default value if not in config
 
     # Enter configuration mode
     send_command(shell, "config system dns-database")
+
+    # Delete current database 
+    send_command(shell, f"delete \"{dbname}\"")
+    time.sleep(0.2)
+
+    # Create database
     send_command(shell, f"edit \"{dbname}\"")
     send_command(shell, f"set domain \"{dnsdomain}\"")
     send_command(shell, f"set ttl {ttl}")
-    send_command(shell, f"set primary-name \"clark.ns.cloudflare.com\"")
-    send_command(shell, f"set contact \"hostmaster@routesquared.com\"")
+    send_command(shell, f"set primary-name \"{primary_name}\"")
+    send_command(shell, f"set contact \"{contact}\"")
     send_command(shell, "config dns-entry")
 
     # Add DNS entries
@@ -183,24 +197,24 @@ def parse_host_file(host_file_content):
             parts = line.split()
             if len(parts) == 2:
                 ip_address, hostname = parts
-                dns_entries.append((hostname, ip_address))
+                # Check if the IP address is IPv4 (omit if it's IPv6)
+                if re.match(r'^\d{1,3}(\.\d{1,3}){3}$', ip_address):
+                    dns_entries.append((hostname, ip_address))
     return dns_entries
 
 # Write DNS entries to Fortinet firewall
-def write_dns_to_fortinet(
-  fortinet_host,
-  fortinet_user,
-  fortinet_pass,
-  fortinet_port,
-  dbname,
-  dnsdomain,
-  ttl,
-  host_file_content
-  ):
-    logging.info("SSH: Connecting to Fortinet Firewall")
+def write_dns_to_fortinet(fortinet_config, dnsdomain, host_file_content):
 
     # Parse DNS entries from host file content
     dns_entries = parse_host_file(host_file_content)
+
+    # Extract Fortinet parameters from the passed config
+    fortinet_host = fortinet_config['hostname']
+    fortinet_user = fortinet_config['username']
+    fortinet_pass = fortinet_config['password']
+    fortinet_port = fortinet_config['port']
+    ttl = fortinet_config['ttl']
+    dbname = fortinet_config['base_name']
 
     # Connect to Fortinet Firewall via SSH
     ssh_client = ssh_connect(fortinet_host, fortinet_user, fortinet_pass, fortinet_port)
@@ -212,7 +226,7 @@ def write_dns_to_fortinet(
             time.sleep(1)  # Wait for the shell to be ready
 
             # Perform DNS configuration
-            configure_fortinet_dns(shell, dbname, dnsdomain, ttl, dns_entries)
+            configure_fortinet_dns(shell, fortinet_config, dnsdomain, dns_entries)
 
         except paramiko.SSHException as e:
             logging.error(f"SSH: Error writing DNS entries to Fortinet Firewall: {e}")
@@ -223,11 +237,12 @@ def write_dns_to_fortinet(
 # Main Routine
 #############################
 def main():
+    """Main routine that handles retrieving Cisco DHCP configuration, converting it, and configuring Fortinet DNS."""
     # Load the configuration
     config = load_config("config.yaml")
     initialize_logging(config['logging']['level'])
 
-    # SSH into the Cisco device
+    # Step 1: SSH into the Cisco device to retrieve DHCP configuration
     ssh_client = ssh_connect(config['ssh']['hostname'], config['ssh']['username'], config['ssh']['password'], config['ssh']['port'])
     
     if ssh_client:
@@ -235,29 +250,22 @@ def main():
         base_host_file = read_existing_host_file(config['files']['existing_host_file'])
 
         if dhcp_config:
+            # Step 2: Convert DHCP configuration to Unix-style host file
             host_file = convert_to_host_file(dhcp_config, base_host_file, config['dns']['domain'])
             logging.info("FUNCTION: Converted Cisco configuration to Unix style host file:\n")
             logging.debug(host_file)
 
+            # Step 3: Write the host file to disk
             write_to_file(config['files']['output_file'], host_file)
             logging.info(f"FILEIO: Host file written to: {config['files']['output_file']}")
         
-            # Execute Unix commands
+            # Step 4: Execute Unix commands (chown, chgrp, restart dnsmasq)
             execute_unix_commands(config['commands']['chown'], config['commands']['chgrp'], config['commands']['restart'])
 
         ssh_client.close()
     
-    # Write DNS entries to Fortinet Firewall
-    write_dns_to_fortinet(
-        config['fortinet']['hostname'], 
-        config['fortinet']['username'], 
-        config['fortinet']['password'], 
-        config['fortinet']['port'],
-        config['fortinet']['base_name'], 
-        config['dns']['domain'],
-        config['fortinet']['ttl'], 
-        host_file
-    )
+    # Step 5: Configure DNS entries on the Fortinet Firewall
+    write_dns_to_fortinet(config['fortinet'], config['dns']['domain'], host_file)
 
 if __name__ == "__main__":
     main()
