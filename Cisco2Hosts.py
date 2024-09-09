@@ -103,14 +103,14 @@ def send_command(shell, command):
     logging.info(f"Executed command: {command}\nOutput: {output}")
     return output
 
-def configure_fortinet_dns(shell, dnsdomain, dns_entries):
+def configure_fortinet_dns(shell, base_name, dnsdomain, ttl, dns_entries):
     logging.info("Starting Fortinet DNS configuration")
 
     # Enter configuration mode
     send_command(shell, "config system dns-database")
-    send_command(shell, f"edit \"home\"")
+    send_command(shell, f"edit \"{base_name}\"")
     send_command(shell, f"set domain \"{dnsdomain}\"")
-    send_command(shell, "set ttl 3600")
+    send_command(shell, f"set ttl {ttl}")
     send_command(shell, "config dns-entry")
 
     # Add DNS entries
@@ -124,7 +124,7 @@ def configure_fortinet_dns(shell, dnsdomain, dns_entries):
     send_command(shell, "end")
     logging.info("Fortinet DNS configuration complete")
 
-def write_dns_to_fortinet(fortinet_host, fortinet_user, fortinet_pass, dnsdomain, dns_entries):
+def write_dns_to_fortinet(fortinet_host, fortinet_user, fortinet_pass, base_name, dnsdomain, ttl, dns_entries):
     logging.info("SSH: Connecting to Fortinet Firewall")
 
     # Connect to Fortinet Firewall via SSH
@@ -137,7 +137,7 @@ def write_dns_to_fortinet(fortinet_host, fortinet_user, fortinet_pass, dnsdomain
             time.sleep(1)  # Wait for the shell to be ready
 
             # Perform DNS configuration
-            configure_fortinet_dns(shell, dnsdomain, dns_entries)
+            configure_fortinet_dns(shell, base_name, dnsdomain, ttl, dns_entries)
 
         except paramiko.SSHException as e:
             logging.error(f"SSH: Error writing DNS entries to Fortinet Firewall: {e}")
@@ -173,14 +173,16 @@ def main():
         ssh_client.close()
     
     # DNS entries for Fortinet Firewall (replace with actual parsed data)
-    dns_entries = [("nas", "172.26.20.40"), ("printer", "172.26.20.41")]
+    dns_entries = [("server", "172.26.20.40"), ("printer", "172.26.20.41")]
 
     # Write DNS entries to Fortinet Firewall
     write_dns_to_fortinet(
         config['fortinet']['hostname'], 
         config['fortinet']['username'], 
         config['fortinet']['password'], 
-        config['dns']['domain'], 
+        config['fortinet']['base_name'],  # Using base_name from config
+        config['dns']['domain'],          # Using domain from config
+        config['fortinet']['ttl'],        # Using TTL from config
         dns_entries
     )
 
