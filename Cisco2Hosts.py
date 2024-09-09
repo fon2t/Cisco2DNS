@@ -145,7 +145,7 @@ def execute_unix_commands(chown_cmd, chgrp_cmd, restart_cmd):
 # Send command to the Fortinet firewall
 def send_command(shell, command):
     shell.send(command + '\n')
-    time.sleep(0.2)  # Give some time for the command to be executed
+    time.sleep(sleep_durations['short'])  # Give some time for the command to be executed
     output = shell.recv(10000).decode('utf-8')  # Adjust buffer size as needed
     logging.info(f"Executed command: {command}")
     logging.debug(f"\nOutput: {output}")
@@ -166,7 +166,7 @@ def configure_fortinet_dns(shell, fortinet_config, dnsdomain, dns_entries):
 
     # Delete current database 
     send_command(shell, f"delete \"{dbname}\"")
-    time.sleep(0.2)
+    time.sleep(sleep_durations['medium'])
 
     # Create database
     send_command(shell, f"edit \"{dbname}\"")
@@ -177,12 +177,27 @@ def configure_fortinet_dns(shell, fortinet_config, dnsdomain, dns_entries):
     send_command(shell, "config dns-entry")
 
     # Add DNS entries
-    for idx, (hostname, ip) in enumerate(dns_entries, start=1):
+    idx = 1  # Start index from 1
+    for hostname, ip in dns_entries:
+        # Add the forward DNS entry
         send_command(shell, f"edit {idx}")
         send_command(shell, f"set hostname \"{hostname}\"")
         send_command(shell, f"set ip {ip}")
         send_command(shell, "next")
     
+        # Increment idx for the reverse DNS entry (PTR record)
+        idx += 1
+
+        # Add the reverse DNS entry (PTR record)
+        send_command(shell, f"edit {idx}")
+        send_command(shell, "set type PTR")
+        send_command(shell, f"set hostname \"{hostname}\"")
+        send_command(shell, f"set ip {ip}")
+        send_command(shell, "next")
+    
+        # Increment idx again for the next iteration
+        idx += 1
+
     # Exit the DNS configuration
     send_command(shell, "end")
     send_command(shell, "next")
@@ -242,6 +257,10 @@ def main():
     config = load_config("config.yaml")
     initialize_logging(config['logging']['level'])
 
+    # Make sleep durations globally accessible within the script
+    global sleep_durations
+    sleep_durations = config['timeouts']
+
     # Step 1: SSH into the Cisco device to retrieve DHCP configuration
     ssh_client = ssh_connect(config['ssh']['hostname'], config['ssh']['username'], config['ssh']['password'], config['ssh']['port'])
     
@@ -261,11 +280,13 @@ def main():
         
             # Step 4: Execute Unix commands (chown, chgrp, restart dnsmasq)
             execute_unix_commands(config['commands']['chown'], config['commands']['chgrp'], config['commands']['restart'])
+            
+            # Step 5: Configure DNS entries on the Fortinet Firewall
+            write_dns_to_fortinet(config['fortinet'], config['dns']['domain'], host_file)
 
         ssh_client.close()
     
-    # Step 5: Configure DNS entries on the Fortinet Firewall
-    write_dns_to_fortinet(config['fortinet'], config['dns']['domain'], host_file)
+
 
 if __name__ == "__main__":
     main()
