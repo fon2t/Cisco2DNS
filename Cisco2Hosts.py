@@ -1,15 +1,6 @@
-###################################
-# Cisco DHCP to Hostfile
-#
-# Nick Route 1 Sep 2024
-#
-##################################
-# Needs Paramiko library
-# install via pip install paramiko
 import logging
 import sys
 import datetime
-import time
 import paramiko
 import re
 import os
@@ -102,6 +93,42 @@ def execute_unix_commands(chown_cmd, chgrp_cmd, restart_cmd):
         print(f"Error executing Unix commands: {e}")
 
 #############################
+# Write DNS Entries to Fortinet Firewall
+#############################
+def write_dns_to_fortinet(fortinet_host, fortinet_user, fortinet_pass, dnsdomain, dns_entries):
+    logging.info("SSH: Connecting to Fortinet Firewall")
+    
+    # Connect to Fortinet Firewall via SSH
+    ssh_client = ssh_connect(fortinet_host, fortinet_user, fortinet_pass, 22)  # Assuming default SSH port is 22
+    
+    if ssh_client:
+        try:
+            # Start DNS configuration
+            ssh_client.exec_command("config system dns-database")
+            ssh_client.exec_command(f"edit \"home\"")
+            ssh_client.exec_command(f"set domain \"{dnsdomain}\"")
+            ssh_client.exec_command(f"set ttl 3600")
+            ssh_client.exec_command(f"config dns-entry")
+            
+            # Write each DNS entry
+            for idx, (hostname, ip) in enumerate(dns_entries, start=1):
+                logging.info(f"Adding DNS entry {idx}: {hostname} -> {ip}")
+                ssh_client.exec_command(f"edit {idx}")
+                ssh_client.exec_command(f"set hostname \"{hostname}\"")
+                ssh_client.exec_command(f"set ip {ip}")
+                ssh_client.exec_command("next")
+
+            # End configuration
+            ssh_client.exec_command("end")
+            logging.info("SSH: DNS entries successfully written to Fortinet Firewall")
+        
+        except paramiko.SSHException as e:
+            logging.error(f"SSH: Error writing DNS entries to Fortinet Firewall: {e}")
+        
+        finally:
+            ssh_client.close()
+
+#############################
 # Main Routine
 #############################
 def main():
@@ -126,6 +153,18 @@ def main():
             execute_unix_commands(config['commands']['chown'], config['commands']['chgrp'], config['commands']['restart'])
 
         ssh_client.close()
+    
+    # Example DNS entries: Replace with your parsed entries
+    dns_entries = [("nas", "172.26.20.40"), ("printer", "172.26.20.41")]  # Replace with actual data
+    
+    # Write DNS entries to Fortinet Firewall
+    write_dns_to_fortinet(
+        config['fortinet']['hostname'], 
+        config['fortinet']['username'], 
+        config['fortinet']['password'], 
+        config['dns']['domain'], 
+        dns_entries
+    )
 
 if __name__ == "__main__":
     main()
