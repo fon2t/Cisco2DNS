@@ -1,22 +1,35 @@
 ###################################
 # Cisco DHCP to Hostfile
 #
-# Nick Route 16 December 2023
+# Nick Route 1 Sep 2024
 #
 ##################################
 # Needs Paramiko library
-# install via pip install paramikoimport paramiko
-import logging, sys
-import datetime, time
+# install via pip install paramiko
+import logging
+import sys
+import datetime
+import time
 import paramiko
 import re
 import os
 import subprocess
+import yaml
+
+# Load YAML configuration file
+def load_config(yaml_file):
+    with open(yaml_file, 'r') as file:
+        return yaml.safe_load(file)
+
+# Initialize logging
+def initialize_logging(log_level):
+    level = logging.DEBUG if log_level == 'DEBUG' else logging.INFO
+    logging.basicConfig(stream=sys.stderr, level=level)
 
 #############################
 # Connect to device using ssh
 #############################
-def ssh_connect(hostname, username, password):
+def ssh_connect(hostname, username, password, port):
     try:
         ssh_client = paramiko.SSHClient()
         ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -47,8 +60,7 @@ def read_existing_host_file(existing_file):
     except FileNotFoundError:
         return ""
 
-
-def convert_to_host_file(dhcp_config, existing_content):
+def convert_to_host_file(dhcp_config, existing_content, dnsdomain):
     lines = dhcp_config.split('\n')
     in_dhcp_pool = False
     host_entries = []
@@ -64,30 +76,22 @@ def convert_to_host_file(dhcp_config, existing_content):
             entry = re.match(r"\s*host ([^\s]+) ([^\s]+)", line)
             ip_address, netmask = entry.group(1), entry.group(2)
             host_entries.append((ip_address, pool_name + dnsdomain))
-        # elif in_dhcp_pool and re.match(r"!", line):
-        elif in_dhcp_pool:
+        else:
             in_dhcp_pool = False
 
-    # Sort entries by the second, third, and fourth octets of the IP address
-    # sorted_entries = sorted(host_entries, key=lambda x: (int(x[0].split('.')[2]), int(x[0].split('.')[3])))
     sorted_entries = sorted(host_entries, key=lambda x: tuple(map(int, x[0].split('.')[1:])))
 
     # Create file header
-    header = f"# Auto created host file \n"
-    header += f"# Generated from switch dhcp configuration \n"
-    header += f"# Generated on {now} \n"
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    header = f"# Auto created host file \n# Generated from switch dhcp configuration \n# Generated on {now} \n"
     
-    # Create the Unix-style host file
     unix_hosts = header + existing_content + "\n".join([f"{ip} {hostname}" for ip, hostname in sorted_entries])
 
     return unix_hosts
 
-
-
 def write_to_file(file_path, content):
     with open(file_path, 'w', newline=os.linesep) as file:
         file.write(content)
-
 
 def execute_unix_commands(chown_cmd, chgrp_cmd, restart_cmd):
     try:
@@ -98,56 +102,30 @@ def execute_unix_commands(chown_cmd, chgrp_cmd, restart_cmd):
         print(f"Error executing Unix commands: {e}")
 
 #############################
-# Main Parameters
-#############################
-
-# Date - used for filename
-now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-# SSH port
-port=22
-# SSH parameters
-hostname = "<ip address>"
-username = "cisco"
-password = "password"
-# DNS subdomain - leave blank if you don't want one
-# Leading "." is required
-dnsdomain = ".home.arpa"
-# Enable logging
-# logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
-logging.basicConfig(stream=sys.stderr, level=logging.INFO)
-# File parameters
-existing_host_file = "./default_hosts.txt"
-# output_file = "./hosts.txt"  # Specify the desired output file path
-output_file = "/etc/pihole/custom.list"  # Specify the desired output file path
-# Unix commands
-chown_cmd = "chown pihole:pihole " + output_file
-chgrp_cmd = "chgrp pihole " + output_file
-# restart_cmd = "sudo systemctl restart your_process"
-restart_cmd = "sudo pihole restartdns"
-
-
-#############################
 # Main Routine
 #############################
 def main():
+    config = load_config("config.yaml")
+    initialize_logging(config['logging']['level'])
 
-    ssh_client = ssh_connect(hostname, username, password)
+    ssh_client = ssh_connect(config['ssh']['hostname'], config['ssh']['username'], config['ssh']['password'], config['ssh']['port'])
     
     if ssh_client:
         dhcp_config = retrieve_dhcp_pool_config(ssh_client)
-        base_host_file = read_existing_host_file(existing_host_file)
+        base_host_file = read_existing_host_file(config['files']['existing_host_file'])
 
         if dhcp_config:
-            host_file = convert_to_host_file(dhcp_config, base_host_file)
+            host_file = convert_to_host_file(dhcp_config, base_host_file, config['dns']['domain'])
             logging.info("FUNCTION: Converted Cisco configuration to Unix style host file:\n")
             logging.debug(host_file)
 
-            write_to_file(output_file, host_file)
-            logging.info(f"FILEIO: Host file written to: {output_file}")
+            write_to_file(config['files']['output_file'], host_file)
+            logging.info(f"FILEIO: Host file written to: {config['files']['output_file']}")
         
             # Execute Unix commands
-            execute_unix_commands(chown_cmd, chgrp_cmd, restart_cmd)
+            execute_unix_commands(config['commands']['chown'], config['commands']['chgrp'], config['commands']['restart'])
 
         ssh_client.close()
+
 if __name__ == "__main__":
     main()
