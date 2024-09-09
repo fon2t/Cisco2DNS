@@ -125,6 +125,17 @@ def configure_fortinet_dns(shell, dbname, dnsdomain, ttl, dns_entries):
     send_command(shell, "end")
     logging.info("Fortinet DNS configuration complete")
 
+def parse_host_file(host_file_content):
+    dns_entries = []
+    lines = host_file_content.splitlines()
+    for line in lines:
+        if line.strip() and not line.startswith("#"):
+            parts = line.split()
+            if len(parts) == 2:
+                ip_address, hostname = parts
+                dns_entries.append((hostname, ip_address))
+    return dns_entries
+
 def write_dns_to_fortinet(
   fortinet_host,
   fortinet_user,
@@ -133,9 +144,12 @@ def write_dns_to_fortinet(
   dbname,
   dnsdomain,
   ttl,
-  dns_entries
+  host_file_content
   ):
     logging.info("SSH: Connecting to Fortinet Firewall")
+
+    # Parse DNS entries from host file content
+    dns_entries = parse_host_file(host_file_content)
 
     # Connect to Fortinet Firewall via SSH
     ssh_client = ssh_connect(fortinet_host, fortinet_user, fortinet_pass, fortinet_port)
@@ -182,9 +196,6 @@ def main():
 
         ssh_client.close()
     
-    # DNS entries for Fortinet Firewall (replace with actual parsed data)
-    dns_entries = [("server", "172.26.20.40"), ("printer", "172.26.20.41")]
-
     # Write DNS entries to Fortinet Firewall
     write_dns_to_fortinet(
         config['fortinet']['hostname'], 
@@ -194,7 +205,7 @@ def main():
         config['fortinet']['base_name'], 
         config['dns']['domain'],
         config['fortinet']['ttl'], 
-        dns_entries
+        host_file
     )
 
 if __name__ == "__main__":
