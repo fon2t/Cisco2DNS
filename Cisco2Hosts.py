@@ -6,6 +6,7 @@ import re
 import os
 import subprocess
 import yaml
+import time
 
 # Load YAML configuration file
 def load_config(yaml_file):
@@ -93,38 +94,53 @@ def execute_unix_commands(chown_cmd, chgrp_cmd, restart_cmd):
         print(f"Error executing Unix commands: {e}")
 
 #############################
-# Write DNS Entries to Fortinet Firewall
+# Fortinet Interactive Shell
 #############################
+def send_command(shell, command):
+    shell.send(command + '\n')
+    time.sleep(1)  # Give some time for the command to be executed
+    output = shell.recv(10000).decode('utf-8')  # Adjust buffer size as needed
+    logging.info(f"Executed command: {command}\nOutput: {output}")
+    return output
+
+def configure_fortinet_dns(shell, dnsdomain, dns_entries):
+    logging.info("Starting Fortinet DNS configuration")
+
+    # Enter configuration mode
+    send_command(shell, "config system dns-database")
+    send_command(shell, f"edit \"home\"")
+    send_command(shell, f"set domain \"{dnsdomain}\"")
+    send_command(shell, "set ttl 3600")
+    send_command(shell, "config dns-entry")
+
+    # Add DNS entries
+    for idx, (hostname, ip) in enumerate(dns_entries, start=1):
+        send_command(shell, f"edit {idx}")
+        send_command(shell, f"set hostname \"{hostname}\"")
+        send_command(shell, f"set ip {ip}")
+        send_command(shell, "next")
+    
+    # Exit the DNS configuration
+    send_command(shell, "end")
+    logging.info("Fortinet DNS configuration complete")
+
 def write_dns_to_fortinet(fortinet_host, fortinet_user, fortinet_pass, dnsdomain, dns_entries):
     logging.info("SSH: Connecting to Fortinet Firewall")
-    
+
     # Connect to Fortinet Firewall via SSH
     ssh_client = ssh_connect(fortinet_host, fortinet_user, fortinet_pass, 22)  # Assuming default SSH port is 22
     
     if ssh_client:
         try:
-            # Start DNS configuration
-            ssh_client.exec_command("config system dns-database")
-            ssh_client.exec_command(f"edit \"home\"")
-            ssh_client.exec_command(f"set domain \"{dnsdomain}\"")
-            ssh_client.exec_command(f"set ttl 3600")
-            ssh_client.exec_command(f"config dns-entry")
-            
-            # Write each DNS entry
-            for idx, (hostname, ip) in enumerate(dns_entries, start=1):
-                logging.info(f"Adding DNS entry {idx}: {hostname} -> {ip}")
-                ssh_client.exec_command(f"edit {idx}")
-                ssh_client.exec_command(f"set hostname \"{hostname}\"")
-                ssh_client.exec_command(f"set ip {ip}")
-                ssh_client.exec_command("next")
+            # Open an interactive shell
+            shell = ssh_client.invoke_shell()
+            time.sleep(1)  # Wait for the shell to be ready
 
-            # End configuration
-            ssh_client.exec_command("end")
-            logging.info("SSH: DNS entries successfully written to Fortinet Firewall")
-        
+            # Perform DNS configuration
+            configure_fortinet_dns(shell, dnsdomain, dns_entries)
+
         except paramiko.SSHException as e:
             logging.error(f"SSH: Error writing DNS entries to Fortinet Firewall: {e}")
-        
         finally:
             ssh_client.close()
 
@@ -132,9 +148,11 @@ def write_dns_to_fortinet(fortinet_host, fortinet_user, fortinet_pass, dnsdomain
 # Main Routine
 #############################
 def main():
+    # Load the configuration
     config = load_config("config.yaml")
     initialize_logging(config['logging']['level'])
 
+    # SSH into the Cisco device
     ssh_client = ssh_connect(config['ssh']['hostname'], config['ssh']['username'], config['ssh']['password'], config['ssh']['port'])
     
     if ssh_client:
@@ -154,9 +172,9 @@ def main():
 
         ssh_client.close()
     
-    # Example DNS entries: Replace with your parsed entries
-    dns_entries = [("nas", "172.26.20.40"), ("printer", "172.26.20.41")]  # Replace with actual data
-    
+    # DNS entries for Fortinet Firewall (replace with actual parsed data)
+    dns_entries = [("nas", "172.26.20.40"), ("printer", "172.26.20.41")]
+
     # Write DNS entries to Fortinet Firewall
     write_dns_to_fortinet(
         config['fortinet']['hostname'], 
