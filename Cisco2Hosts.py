@@ -180,14 +180,22 @@ def configure_fortinet_dns(shell, fortinet_config, dnsdomain, dns_entries):
     idx = 1  # Start index from 1
     for hostname, ip in dns_entries:
         # Add the forward DNS entry
-        send_command(shell, f"edit {idx}\nset hostname \"{hostname}\"\nset ip {ip}\nnext")
-    
-        # Increment idx for the reverse DNS entry (PTR record)
+        
+        # Check if the IP address is IPv4 and adjust command
+        if re.match(r'^\d{1,3}(\.\d{1,3}){3}$', ip):
+           send_command(shell, f"edit {idx}\nset type A\nset hostname \"{hostname}\"\nset ip {ip}\nnext")
+        else:
+           send_command(shell, f"edit {idx}\nset type AAAA\nset hostname \"{hostname}\"\nset ipv6 {ip}\nnext")    
+        
+        # Increment idx again for the PTR records
         idx += 1
-
-        # Add the reverse DNS entry (PTR record)
-        send_command(shell, f"edit {idx}\nset type PTR\nset hostname \"{hostname}\"\nset ip {ip}\nnext")
-    
+        
+        # Check if the IP address is IPv4 and adjust PTR command
+        if re.match(r'^\d{1,3}(\.\d{1,3}){3}$', ip):
+           send_command(shell, f"edit {idx}\nset type PTR\nset hostname \"{hostname}\"\nset ip {ip}\nnext")
+        else:
+           send_command(shell, f"edit {idx}\nset type PTR_V6\nset hostname \"{hostname}\"\nset ipv6 {ip}\nnext")
+  
         # Increment idx again for the next iteration
         idx += 1
 
@@ -203,9 +211,7 @@ def parse_host_file(host_file_content):
             parts = line.split()
             if len(parts) == 2:
                 ip_address, hostname = parts
-                # Check if the IP address is IPv4 (omit if it's IPv6)
-                if re.match(r'^\d{1,3}(\.\d{1,3}){3}$', ip_address):
-                    dns_entries.append((hostname, ip_address))
+                dns_entries.append((hostname, ip_address))
     return dns_entries
 
 # Write DNS entries to Fortinet firewall
