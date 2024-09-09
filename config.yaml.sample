@@ -1,0 +1,36 @@
+ssh:
+  port: 22
+  hostname: "<Cisco Switch IP Address>"
+  username: "<Cisco Show Run User>"
+  password: "<Password for Cisco>"
+
+fortinet:
+  hostname: "<Firewall IP Address>"
+  port: 22
+  username: "<Firewall Config User>"
+  password: "<Firewall Password>"
+  base_name: "<DNS zone name>"            # Fortinet DNS database base name
+  ttl: 3600                               # TTL for Fortinet DNS entries
+  primary_dns: <primary DNS server>  # Primary DNS server for domain
+  contact: hostmaster@webserver.com       # DNS admin email
+
+dns:
+  domain: "home.arpa"                     # Your local domain - usually home.arpa or local
+
+files:
+  existing_host_file: "./default_hosts.txt"  # Location of a file that has static entries not in DHCP
+  output_file: "/etc/pihole/custom.list"     # Where to write the custom DNS text database
+
+commands:
+  chown: "chown pihole:pihole /etc/pihole/custom.list"  # Linux/Unix commands required for DNS server to re-read database
+  chgrp: "chgrp pihole /etc/pihole/custom.list"         # Continued
+  restart: "sudo pihole restartdns"                     # Continued
+
+timeouts:
+  short: 0.2    # Short sleep timeout in seconds
+  medium: 0.5   # Medium sleep timeout in seconds
+  long: 1       # Long sleep timeout in seconds
+
+logging:
+  level: "INFO"   # Debug level
+#  level: "DEBUG"
