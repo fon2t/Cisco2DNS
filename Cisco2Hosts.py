@@ -129,14 +129,15 @@ def write_to_file(file_path, content):
     with open(file_path, 'w', newline=os.linesep) as file:
         file.write(content)
 
-# Runs Unix commands
-def execute_unix_commands(chown_cmd, chgrp_cmd, restart_cmd):
+# Runs Unix commands by parsing the directory
+def execute_unix_commands(commands):
     try:
-        subprocess.run(chown_cmd, check=True, shell=True)
-        subprocess.run(chgrp_cmd, check=True, shell=True)
-        subprocess.run(restart_cmd, check=True, shell=True)
+        for command_name, command in commands.items():
+            if command:  # Ensure there's a command to run
+                logging.info(f"Executing {command_name}: {command}")
+                subprocess.run(command, check=True, shell=True)
     except subprocess.CalledProcessError as e:
-        print(f"Error executing Unix commands: {e}")
+        logging.error(f"Error executing command {command_name}: {e}")
 
 ###########################
 # Fortinet DNS Configuration
@@ -158,7 +159,7 @@ def configure_fortinet_dns(shell, fortinet_config, dnsdomain, dns_entries):
     # Extract Fortinet-specific values from the configuration
     dbname = fortinet_config['base_name']
     ttl = fortinet_config['ttl']
-    primary_name = fortinet_config.get('primary_dns', 'clark.ns.cloudflare.com')  # Default value if not in config
+    primary_name = fortinet_config.get('primary_dns', 'a.root-servers.net')  # Default value if not in config
     contact = fortinet_config.get('contact', 'hostmaster@webserver.com')  # Default value if not in config
 
     # Enter configuration mode
@@ -170,38 +171,28 @@ def configure_fortinet_dns(shell, fortinet_config, dnsdomain, dns_entries):
 
     # Create database
     send_command(shell, f"edit \"{dbname}\"")
-    send_command(shell, f"set domain \"{dnsdomain}\"")
-    send_command(shell, f"set ttl {ttl}")
-    send_command(shell, f"set primary-name \"{primary_name}\"")
-    send_command(shell, f"set contact \"{contact}\"")
+    # Single mega command
+    send_command(shell, f"set domain \"{dnsdomain}\"\nset ttl {ttl}\nset primary-name \"{primary_name}\"\nset contact \"{contact}\"")
+    # Start database configuration    
     send_command(shell, "config dns-entry")
 
     # Add DNS entries
     idx = 1  # Start index from 1
     for hostname, ip in dns_entries:
         # Add the forward DNS entry
-        send_command(shell, f"edit {idx}")
-        send_command(shell, f"set hostname \"{hostname}\"")
-        send_command(shell, f"set ip {ip}")
-        send_command(shell, "next")
+        send_command(shell, f"edit {idx}\nset hostname \"{hostname}\"\nset ip {ip}\nnext")
     
         # Increment idx for the reverse DNS entry (PTR record)
         idx += 1
 
         # Add the reverse DNS entry (PTR record)
-        send_command(shell, f"edit {idx}")
-        send_command(shell, "set type PTR")
-        send_command(shell, f"set hostname \"{hostname}\"")
-        send_command(shell, f"set ip {ip}")
-        send_command(shell, "next")
+        send_command(shell, f"edit {idx}\nset type PTR\nset hostname \"{hostname}\"\nset ip {ip}\nnext")
     
         # Increment idx again for the next iteration
         idx += 1
 
-    # Exit the DNS configuration
-    send_command(shell, "end")
-    send_command(shell, "next")
-    send_command(shell, "end")
+    # Exit the DNS configuration with an end, next, end
+    send_command(shell, "end\nnext\nend")
     logging.info("Fortinet DNS configuration complete")
 
 def parse_host_file(host_file_content):
@@ -279,7 +270,7 @@ def main():
             logging.info(f"FILEIO: Host file written to: {config['files']['output_file']}")
         
             # Step 4: Execute Unix commands (chown, chgrp, restart dnsmasq)
-            execute_unix_commands(config['commands']['chown'], config['commands']['chgrp'], config['commands']['restart'])
+            execute_unix_commands(config['commands'])
             
             # Step 5: Configure DNS entries on the Fortinet Firewall
             write_dns_to_fortinet(config['fortinet'], config['dns']['domain'], host_file)
