@@ -67,7 +67,7 @@ def convert_to_host_file(dhcp_config, existing_content, dnsdomain):
         elif in_dhcp_pool and re.match(r"\s*host ([^\s]+) ([^\s]+)", line):
             entry = re.match(r"\s*host ([^\s]+) ([^\s]+)", line)
             ip_address, netmask = entry.group(1), entry.group(2)
-            host_entries.append((ip_address, pool_name + dnsdomain))
+            host_entries.append((ip_address, pool_name + "." + dnsdomain))
         else:
             in_dhcp_pool = False
 
@@ -100,15 +100,16 @@ def send_command(shell, command):
     shell.send(command + '\n')
     time.sleep(1)  # Give some time for the command to be executed
     output = shell.recv(10000).decode('utf-8')  # Adjust buffer size as needed
-    logging.info(f"Executed command: {command}\nOutput: {output}")
+    logging.info(f"Executed command: {command}")
+    logging.debug(f"\nOutput: {output}")
     return output
 
-def configure_fortinet_dns(shell, base_name, dnsdomain, ttl, dns_entries):
+def configure_fortinet_dns(shell, dbname, dnsdomain, ttl, dns_entries):
     logging.info("Starting Fortinet DNS configuration")
 
     # Enter configuration mode
     send_command(shell, "config system dns-database")
-    send_command(shell, f"edit \"{base_name}\"")
+    send_command(shell, f"edit \"{dbname}\"")
     send_command(shell, f"set domain \"{dnsdomain}\"")
     send_command(shell, f"set ttl {ttl}")
     send_command(shell, "config dns-entry")
@@ -124,11 +125,20 @@ def configure_fortinet_dns(shell, base_name, dnsdomain, ttl, dns_entries):
     send_command(shell, "end")
     logging.info("Fortinet DNS configuration complete")
 
-def write_dns_to_fortinet(fortinet_host, fortinet_user, fortinet_pass, base_name, dnsdomain, ttl, dns_entries):
+def write_dns_to_fortinet(
+  fortinet_host,
+  fortinet_user,
+  fortinet_pass,
+  fortinet_port,
+  dbname,
+  dnsdomain,
+  ttl,
+  dns_entries
+  ):
     logging.info("SSH: Connecting to Fortinet Firewall")
 
     # Connect to Fortinet Firewall via SSH
-    ssh_client = ssh_connect(fortinet_host, fortinet_user, fortinet_pass, 22)  # Assuming default SSH port is 22
+    ssh_client = ssh_connect(fortinet_host, fortinet_user, fortinet_pass, fortinet_port)
     
     if ssh_client:
         try:
@@ -137,7 +147,7 @@ def write_dns_to_fortinet(fortinet_host, fortinet_user, fortinet_pass, base_name
             time.sleep(1)  # Wait for the shell to be ready
 
             # Perform DNS configuration
-            configure_fortinet_dns(shell, base_name, dnsdomain, ttl, dns_entries)
+            configure_fortinet_dns(shell, dbname, dnsdomain, ttl, dns_entries)
 
         except paramiko.SSHException as e:
             logging.error(f"SSH: Error writing DNS entries to Fortinet Firewall: {e}")
@@ -180,9 +190,10 @@ def main():
         config['fortinet']['hostname'], 
         config['fortinet']['username'], 
         config['fortinet']['password'], 
-        config['fortinet']['base_name'],  # Using base_name from config
-        config['dns']['domain'],          # Using domain from config
-        config['fortinet']['ttl'],        # Using TTL from config
+        config['fortinet']['port'],
+        config['fortinet']['base_name'], 
+        config['dns']['domain'],
+        config['fortinet']['ttl'], 
         dns_entries
     )
 
