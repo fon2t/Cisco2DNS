@@ -5,6 +5,7 @@ ssh:
   password: "<Password for Cisco>"
 
 fortinet:
+  enabled: false
   hostname: "<Firewall IP Address>"
   port: 22
   username: "<Firewall Config User>"
@@ -18,13 +19,18 @@ dns:
   domain: "home.arpa"                     # Your local domain - usually home.arpa or local
 
 files:
+  enabled: false
   existing_host_file: "./default_hosts.txt"  # Location of a file that has static entries not in DHCP
   output_file: "/etc/pihole/custom.list"     # Where to write the custom DNS text database
 
-commands:
+pihole:
+  enabled: false
   chown: "chown pihole:pihole /etc/pihole/custom.list"  # Linux/Unix commands required for DNS server to re-read database
   chgrp: "chgrp pihole /etc/pihole/custom.list"         # Continued
-  restart: "sudo pihole restartdns"                     # Continued
+# restart: "sudo pihole restartdns"                     # For pi-hole v5
+  restart: "sudo systemctl restart pihole-FTL"          # For pi-hole v6 - not necessary with API
+  api_url: "http://1.2.3.4:8080/api/config"         # API URL - replace 1.2.3.4 with IP address of your pi-hole instance
+
 
 timeouts:
   short: 0.2    # Short sleep timeout in seconds
@@ -32,5 +38,5 @@ timeouts:
   long: 1       # Long sleep timeout in seconds
 
 logging:
-  level: "INFO"   # Debug level
+  level: "INFO"   # Debug level - change to debug if required
 #  level: "DEBUG"
