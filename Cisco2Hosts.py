@@ -156,8 +156,8 @@ def call_webhook(webhook_url, host_file_content):
     # Parse and format host entries
     dns_entries = parse_host_file(host_file_content)
     formatted_hosts = []
-    logging.debug(f"Webhook: host file input: {dns_entries}")
-    logging.info(f"Webhook: Parsing host file into JSON for webhook call")
+    logging.debug(f"WEBHOOK: host file input: {dns_entries}")
+    logging.info(f"WEBHOOK: Parsing host file into JSON for webhook call")
 
     # Add JSON entries
     for hostname, ip in dns_entries:
@@ -184,9 +184,9 @@ def call_webhook(webhook_url, host_file_content):
 
     response = requests.patch(webhook_url, headers=headers, data=json.dumps(payload))
 
-    logging.info(f"Webhook: Response Status: {response.status_code}")
-    logging.debug(f"Webhook: Response Content: {response.text}")
-    logging.debug(f"Webhook: JSON output: {payload}")
+    logging.info(f"WEBHOOK: Response Status: {response.status_code}")
+    logging.debug(f"WEBHOOK: Response Content: {response.text}")
+    logging.debug(f"WEBHOOK: JSON output: {payload}")
 
 
 ###########################
@@ -198,13 +198,13 @@ def send_command(shell, command):
     shell.send(command + '\n')
     time.sleep(sleep_durations['short'])  # Give some time for the command to be executed
     output = shell.recv(10000).decode('utf-8')  # Adjust buffer size as needed
-    logging.info(f"Executed command: {command}")
+    logging.debug(f"Executed command: {command}")
     logging.debug(f"\nOutput: {output}")
     return output
 
 # Configure Fortinet DNS settings
 def configure_fortinet_dns(shell, fortinet_config, dnsdomain, dns_entries):
-    logging.info("Starting Fortinet DNS configuration")
+    logging.info("FORTINET: Starting DNS configuration")
 
     # Extract Fortinet-specific values from the configuration
     dbname = fortinet_config['base_name']
@@ -250,7 +250,8 @@ def configure_fortinet_dns(shell, fortinet_config, dnsdomain, dns_entries):
 
     # Exit the DNS configuration with an end, next, end
     send_command(shell, "end\nnext\nend")
-    logging.info("Fortinet DNS configuration complete")
+    logging.info("FORTINET: DNS configuration complete")
+    logging.info(F"FORTINET: {idx} entries added")
 
 def parse_host_file(host_file_content):
     dns_entries = []
