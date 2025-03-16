@@ -42,3 +42,34 @@ You can install the required Python libraries using `pip`:
 
 ```bash
 pip install paramiko pyyaml requests
+
+Configuration
+Before running the script, you must create a YAML configuration file (config.yaml). The YAML file should include the following sections:
+
+```yaml
+logging:
+  level: DEBUG  # Options: DEBUG, INFO, WARNING, ERROR
+
+timeouts:
+  short: 1
+  medium: 5
+  long: 10
+
+cisco_device:
+  hostname: "<Cisco device IP>"
+  username: "<SSH username>"
+  password: "<SSH password>"
+  port: 22  # Optional: Change if non-standard port is used
+
+fortinet_config:
+  hostname: "<Fortinet firewall IP>"
+  username: "<Fortinet username>"
+  password: "<Fortinet password>"
+  port: 22  # Optional: Change if non-standard port is used
+  base_name: "<Database base name>"
+  ttl: 3600
+  primary_dns: "a.root-servers.net"
+  contact: "hostmaster@webserver.com"
+  
+dnsdomain: "<Your DNS domain>"
+
