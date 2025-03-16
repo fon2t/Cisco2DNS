@@ -27,6 +27,11 @@ The script includes the following functions:
 - `parse_host_file`: Parses the host file content.
 - `write_dns_to_fortinet`: Writes parsed DNS entries to the Fortinet firewall.
 
+### Key Notes
+- The script is modular and can be easily modified for different devices, commands, or configurations.
+- The use of SSH for configuration retrieval and command execution allows for automation in network management tasks.
+- The script handles both IPv4 and IPv6 configurations, ensuring compatibility with modern DNS infrastructures.
+
 ## Installation
 
 ### Prerequisites
