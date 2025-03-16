@@ -1,8 +1,44 @@
-# Cisco2hostfile
+# Cisco DHCP to Unix dnsmasq and Fortinet DNS Configuration Converter
 
-Python script that extracts Cisco switch DHCP configuration and creates a pi-hole/dnsmasq compatible DNS hostfile and also writes a Fortinet firewall DNS database.
+## Description
 
-Usage
-sudo python3 Cisco2Hosts.py
+This script automates the process of converting Cisco DHCP configurations into Unix-style host files for use with dnsmasq, and then writing DNS entries into a Fortinet firewall DNS database.
 
-All configuration and credentials are stored in config.yaml.
+The process includes:
+1. Connecting to a Cisco device to retrieve DHCP pool configurations.
+2. Converting the DHCP configuration to a Unix-style host file for use with dnsmasq.
+3. Writing DNS entries from the host file to a Fortinet firewall DNS database.
+
+## Functions Overview
+
+The script includes the following functions:
+
+- `load_config`: Loads the YAML configuration file.
+- `initialize_logging`: Initializes the logging configuration.
+- `ssh_connect`: Establishes an SSH connection to a Cisco device.
+- `retrieve_dhcp_pool_config`: Retrieves the DHCP pool configuration from a Cisco device.
+- `read_existing_host_file`: Reads the existing Unix-style host file.
+- `convert_to_host_file`: Converts the DHCP configuration into a host file format.
+- `write_to_file`: Writes content to a file.
+- `execute_unix_commands`: Executes Unix commands (e.g., `chown`, `chgrp`, `restart`).
+- `send_command`: Sends a command to an SSH shell.
+- `configure_fortinet_dns`: Configures Fortinet DNS settings.
+- `parse_host_file`: Parses the host file content.
+- `write_dns_to_fortinet`: Writes parsed DNS entries to the Fortinet firewall.
+
+## Installation
+
+### Prerequisites
+
+To use this script, you need the following:
+- Python 3.x installed.
+- The following Python libraries:
+  - `paramiko` for SSH communication.
+  - `yaml` for YAML file parsing.
+  - `requests` for making HTTP requests.
+  - `logging`, `subprocess`, `time`, and other standard Python libraries.
+  
+You can install the required Python libraries using `pip`:
+
+```bash
+pip install paramiko pyyaml requests
