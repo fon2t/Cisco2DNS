@@ -8,7 +8,7 @@ This script automates the process of converting Cisco DHCP configurations into U
 Once you have the required configuration in place, you can run the script by executing the following command in your terminal:
 
 ```bash
-python cisco_dhcp_to_dns.py
+python Cisco2Hosts.py
 ```
 ## Functions Overview
 
