@@ -29,7 +29,9 @@ Main Routine:
 import logging
 import sys
 import datetime
+import json
 import re
+import requests
 import os
 import subprocess
 import time
@@ -139,6 +141,54 @@ def execute_unix_commands(commands):
     except subprocess.CalledProcessError as e:
         logging.error(f"Error executing command {command_name}: {e}")
 
+
+###########################
+# Webhook Calls
+###########################
+
+def call_webhook(webhook_url, host_file_content):
+    """
+    Parses the host file content, formats it, and sends a PATCH request to update DNS configuration.
+
+    :param webhook_url: The webhook URL.
+    :param host_file: Raw host file content as a list of lines.
+    """
+    # Parse and format host entries
+    dns_entries = parse_host_file(host_file_content)
+    formatted_hosts = []
+    logging.debug(f"Webhook: host file input: {dns_entries}")
+    logging.info(f"Webhook: Parsing host file into JSON for webhook call")
+
+    # Add JSON entries
+    for hostname, ip in dns_entries:
+        # Check if the IP address is IPv4 and adjust command
+        if re.match(r'^\d{1,3}(\.\d{1,3}){3}$', ip):
+          formatted_hosts.append(f"{ip} {hostname}")  # Write to formatted buffer file
+        else:
+          formatted_hosts.append(f"{ip} {hostname}")  # IP v6 handling - no different
+#           continue
+
+    # Prepare webhook request
+    payload = {
+        "config": {
+            "dns": {
+                "hosts": formatted_hosts
+            }
+        }
+    }
+
+    headers = {
+        "accept": "application/json",
+        "content-type": "application/json"
+    }
+
+    response = requests.patch(webhook_url, headers=headers, data=json.dumps(payload))
+
+    logging.info(f"Webhook: Response Status: {response.status_code}")
+    logging.debug(f"Webhook: Response Content: {response.text}")
+    logging.debug(f"Webhook: JSON output: {payload}")
+
+
 ###########################
 # Fortinet DNS Configuration
 ###########################
@@ -180,22 +230,21 @@ def configure_fortinet_dns(shell, fortinet_config, dnsdomain, dns_entries):
     idx = 1  # Start index from 1
     for hostname, ip in dns_entries:
         # Add the forward DNS entry
-        
         # Check if the IP address is IPv4 and adjust command
         if re.match(r'^\d{1,3}(\.\d{1,3}){3}$', ip):
            send_command(shell, f"edit {idx}\nset type A\nset hostname \"{hostname}\"\nset ip {ip}\nnext")
         else:
            send_command(shell, f"edit {idx}\nset type AAAA\nset hostname \"{hostname}\"\nset ipv6 {ip}\nnext")    
-        
+
         # Increment idx again for the PTR records
         idx += 1
-        
+
         # Check if the IP address is IPv4 and adjust PTR command
         if re.match(r'^\d{1,3}(\.\d{1,3}){3}$', ip):
            send_command(shell, f"edit {idx}\nset type PTR\nset hostname \"{hostname}\"\nset ip {ip}\nnext")
         else:
            send_command(shell, f"edit {idx}\nset type PTR_V6\nset hostname \"{hostname}\"\nset ipv6 {ip}\nnext")
-  
+
         # Increment idx again for the next iteration
         idx += 1
 
@@ -253,6 +302,8 @@ def main():
     # Load the configuration
     config = load_config("config.yaml")
     initialize_logging(config['logging']['level'])
+    logging.info(f"LOGGING: Logging level configured to {config['logging']['level']}")
+
 
     # Make sleep durations globally accessible within the script
     global sleep_durations
@@ -260,7 +311,7 @@ def main():
 
     # Step 1: SSH into the Cisco device to retrieve DHCP configuration
     ssh_client = ssh_connect(config['ssh']['hostname'], config['ssh']['username'], config['ssh']['password'], config['ssh']['port'])
-    
+
     if ssh_client:
         dhcp_config = retrieve_dhcp_pool_config(ssh_client)
         base_host_file = read_existing_host_file(config['files']['existing_host_file'])
@@ -268,21 +319,35 @@ def main():
         if dhcp_config:
             # Step 2: Convert DHCP configuration to Unix-style host file
             host_file = convert_to_host_file(dhcp_config, base_host_file, config['dns']['domain'])
-            logging.info("FUNCTION: Converted Cisco configuration to Unix style host file:\n")
+            logging.info("FILES: Converted Cisco configuration to Unix style host file:\n")
             logging.debug(host_file)
 
             # Step 3: Write the host file to disk
-            write_to_file(config['files']['output_file'], host_file)
-            logging.info(f"FILEIO: Host file written to: {config['files']['output_file']}")
-        
-            # Step 4: Execute Unix commands (chown, chgrp, restart dnsmasq)
-            execute_unix_commands(config['commands'])
-            
+            if str(config['files']['enabled']).lower() == "true":
+              logging.info("FILES: Files out configuration enabled")
+              write_to_file(config['files']['output_file'], host_file)
+              logging.info(f"FILEIO: Host file written to: {config['files']['output_file']}")
+            else:
+              logging.info(f"FILES: No files written as configuration disabled (set to false)")
+
+            # Step 4: Update Pi-hole
+            if str(config['pihole']['enabled']).lower() == "true":
+              logging.info("PIHOLE: Pi-hole configuration enabled")
+              call_webhook(config['pihole']['api_url'], host_file)
+            # execute_unix_commands(config['pihole'])
+            else:
+              logging.info(f"PIHOLE: Pi-hole configuration not written as disabled")
+
+
             # Step 5: Configure DNS entries on the Fortinet Firewall
-            write_dns_to_fortinet(config['fortinet'], config['dns']['domain'], host_file)
+            if str(config['fortinet']['enabled']).lower() == "true":
+              logging.info("FORTINET: Firewall configuration enabled")
+              write_dns_to_fortinet(config['fortinet'], config['dns']['domain'], host_file)
+            else:
+              logging.info(f"FORTINET: Firewall not configured with DNS")
 
         ssh_client.close()
-    
+
 
 
 if __name__ == "__main__":
