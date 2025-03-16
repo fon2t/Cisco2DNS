@@ -4,11 +4,12 @@
 
 This script automates the process of converting Cisco DHCP configurations into Unix-style host files for use with dnsmasq, and then writing DNS entries into a Fortinet firewall DNS database.
 
-The process includes:
-1. Connecting to a Cisco device to retrieve DHCP pool configurations.
-2. Converting the DHCP configuration to a Unix-style host file for use with dnsmasq.
-3. Writing DNS entries from the host file to a Fortinet firewall DNS database.
+### Usage
+Once you have the required configuration in place, you can run the script by executing the following command in your terminal:
 
+```bash
+python cisco_dhcp_to_dns.py
+```
 ## Functions Overview
 
 The script includes the following functions:
@@ -74,3 +75,19 @@ fortinet_config:
   
 dnsdomain: "<Your DNS domain>"
 ```
+
+### Process Overview
+1. Cisco Device Connection: The script connects to a Cisco device using SSH and retrieves the DHCP configuration.
+1. Conversion to Unix Host File: The DHCP configuration is parsed and converted to a Unix-style host file format.
+1. Restarting Unix processes such as Pi-hole to re-read the hostfile.
+1. Making an API call via webhooks to update DNS (i.e., for Pi-hole v6).
+1. Writing to DNS Database: DNS entries are parsed and written into a Fortinet firewall DNS database via SSH.
+
+### Acknowledgements
+* Paramiko: This script uses Paramiko for SSH connectivity to the Cisco device and Fortinet firewall.
+* YAML: Used for configuration file parsing to load settings.
+* Requests: Used for sending PATCH requests to a remote server to update DNS configuration.
+* Special thanks to the creators of these libraries and to the open-source community for providing these powerful tools.
+
+### License
+This script is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
