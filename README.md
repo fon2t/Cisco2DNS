@@ -42,8 +42,9 @@ You can install the required Python libraries using `pip`:
 
 ```bash
 pip install paramiko pyyaml requests
+```
 
-Configuration
+### Configuration
 Before running the script, you must create a YAML configuration file (config.yaml). The YAML file should include the following sections:
 
 ```yaml
@@ -72,4 +73,4 @@ fortinet_config:
   contact: "hostmaster@webserver.com"
   
 dnsdomain: "<Your DNS domain>"
-
+```
